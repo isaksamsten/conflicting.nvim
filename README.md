@@ -1,6 +1,12 @@
 # conflicting.nvim
 
-conflicting.nvim lets you resolve conflicts, while highlighting them in style.
+conflicting.nvim allows you to resolve conflicts while highlighting them in style.
+
+The plugin was originally integrated into my LLM code assistant
+([sia.nvim](https://github.com/isaksamsten/sia.nvim)), but I appreciated its
+workflow for managing merge conflicts. So here it is: a conflict resolver that
+is resource-light (it adds no overhead when there are no conflicts) while
+offering a more visually appealing experience.
 
 ## Demo
 
@@ -11,7 +17,7 @@ TODO
 - Track Git repositories for merge conflicts. No overhead for files without
   conflicts.
 - Manually track files for conflicts from other source (e.g.,
-  [sia.nvim)(https://github.com/isaksamsten/sia.nvim))
+  [sia.nvim](https://github.com/isaksamsten/sia.nvim))
 - Resolve conflicts:
   - Accept current changes
   - Accept incoming changes
