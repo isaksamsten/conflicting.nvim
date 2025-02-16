@@ -10,7 +10,9 @@ offering a more visually appealing experience.
 
 ## Demo
 
-TODO
+https://github.com/user-attachments/assets/92ea6953-60ae-44ad-98f6-86673d20d8dd
+
+https://github.com/user-attachments/assets/890dc214-fb50-46d2-ba03-e1b4d9d19931
 
 ## Features
 
