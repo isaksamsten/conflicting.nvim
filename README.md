@@ -87,3 +87,17 @@ Bind the following functions to suitable keys or use the command `Conflicting`:
 - `require("conflicting").reject()`: reject both changes. The same as `Conflicting reject`.
 - `require("conflicting").diff()`: open a two-way diff with the current and
   incoming changes to manually merge the changes. The same as `Conflicting diff`.
+
+## Highlight groups
+
+`conflicting.nvim` uses the following highlight groups:
+
+- `ConflictingOursHeader` links to `DiffAdd` by default
+- `ConflictingOurs` links to `DiffAdd` by default
+- `ConflictingTheirs` links to `DiffChange` by default
+- `ConflictingTheirsHeader` links to `DiffChange` by default
+- `ConflictingDelimiter` links to `Normal` by default
+
+Since no colorscheme integrates with `conflicting.nvim`, you need to set the
+highlight groups manually to override these defaults. See my
+[config](https://github.com/isaksamsten/nvim-config/blob/fa6fa6139f31963d3afd953ec84c4a7cb78d96eb/colors/dragon.lua#L660C1-L662C8) for inspiration.
