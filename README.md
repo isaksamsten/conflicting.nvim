@@ -73,3 +73,17 @@ https://github.com/user-attachments/assets/890dc214-fb50-46d2-ba03-e1b4d9d19931
   auto_enable = true,
 }
 ```
+
+## Usage
+
+Bind the following functions to suitable keys or use the command `Conflicting`:
+
+- `require("conflicting").accept_incoming()`: accept incoming changes. The same
+  as `Conflicting incoming`
+- `require("conflicting").accept_current()`: accept current changes (reject
+  incoming changes). The same as `Conflicting current`.
+- `require("conflicting").accept_both()`: accept both changes (and manually
+  edit the conflict). The same as `Conflicting both`.
+- `require("conflicting").reject()`: reject both changes. The same as `Conflicting reject`.
+- `require("conflicting").diff()`: open a two-way diff with the current and
+  incoming changes to manually merge the changes. The same as `Conflicting diff`.
