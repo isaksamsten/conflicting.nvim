@@ -343,15 +343,23 @@ local git_find_conflicting_files = vim.schedule_wrap(function(buf)
   git_read_stream(stdout, stdout_data)
 end)
 
+local WATCH_FILES = {
+  MERGE_HEAD = true,
+  REBASE_HEAD = true,
+  AUTO_MERGE = true,
+  CHERRY_PICK_HEAD = true,
+  BISECT_HEAD = true,
+  REVERT_HEAD = true,
+}
 --- Sets up a file system watcher and timer to monitor Git merge and rebase events.
---- When the "MERGE_HEAD" or "REBASE_HEAD" file is detected, schedules a check for conflicting files.
+--- When a WATCH_FILES-file is detected, schedules a check for conflicting files.
 --- @param buf integer
 --- @param path string The file system path to be monitored.
 local function git_setup_watcher(buf, path)
   local fs_event = vim.uv.new_fs_event()
   local timer = vim.uv.new_timer()
   local watch_merge_rebase = function(_, filename, _)
-    if filename ~= "MERGE_HEAD" and filename ~= "REBASE_HEAD" then
+    if not WATCH_FILES[filename] then
       return
     end
     timer:stop()
