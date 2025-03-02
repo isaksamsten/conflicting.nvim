@@ -85,39 +85,39 @@ local function find_conflict_markers(content, opts)
   local theirs_pattern = opts.theirs_pattern or "^>>>>>>?>?>?>?>"
   local delimiter_pattern = opts.delimiter_pattern or "^======?=?=?=?"
 
-  local BEFORE = 1
-  local AFTER = 2
-  local NONE = 3
+  local IN_OURS = 1
+  local IN_THEIRS = 2
+  local SEARCHING = 3
 
   local ours = {}
   local theirs = {}
   local ours_tag = nil
-  local all = {}
-  local state = NONE
+  local conflicts = {}
+  local state = SEARCHING
   local lnum = -1
   local match
 
   for l, line in pairs(content) do
-    if state == NONE then
+    if state == SEARCHING then
       match = string.match(line, ours_pattern)
       if match then
-        state = BEFORE
+        state = IN_OURS
         ours_tag = match
         lnum = l
       else
         goto continue
       end
     else
-      if state == BEFORE then
+      if state == IN_OURS then
         if string.match(line, delimiter_pattern) then
-          state = AFTER
+          state = IN_THEIRS
         else
           ours[#ours + 1] = line
         end
-      elseif state == AFTER then
+      elseif state == IN_THEIRS then
         match = string.match(line, theirs_pattern)
         if match then
-          all[#all + 1] = {
+          conflicts[#conflicts + 1] = {
             ours_tag = ours_tag,
             theirs_tag = match,
             lnum = lnum,
@@ -128,7 +128,7 @@ local function find_conflict_markers(content, opts)
           ours = {}
           theirs = {}
           ours_tag = nil
-          state = NONE
+          state = SEARCHING
         else
           theirs[#theirs + 1] = line
         end
@@ -137,7 +137,7 @@ local function find_conflict_markers(content, opts)
     ::continue::
   end
 
-  return all
+  return conflicts
 end
 
 --- @param positions conflicting.Position[]
