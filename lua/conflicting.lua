@@ -2,7 +2,7 @@
 --- @field attach fun(buf: integer):nil
 --- @field detach fun(buf: integer):nil
 --- @field is_enabled fun(buf: integer):nil
----
+
 --- @alias conflicting.Position { ours_lnum: integer, delimiter_lnum: integer, theirs_lnum: integer}
 --- @alias conflicting.Marker
 --- | 0 our header
