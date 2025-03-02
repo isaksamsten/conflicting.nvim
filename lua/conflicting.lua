@@ -478,7 +478,7 @@ local auto_enable = vim.schedule_wrap(function(data)
     return
   end
 
-  if not (vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].buftype == "" and vim.bo[buf].buflisted) then
+  if not vim.api.nvim_buf_is_valid(buf) then
     return
   end
   M.enable(buf)
@@ -520,6 +520,9 @@ M.trackers.git = {
   end,
   --- @returns boolean is_enabled if the current buffer enabled
   is_enabled = function(buf)
+    if not (vim.api.nvim_buf_is_valid(buf) and vim.bo[buf].buftype == "" and vim.bo[buf].buflisted) then
+      return false
+    end
     local gc = git_cache[buf]
     if gc == nil then
       return false
@@ -532,9 +535,7 @@ M.trackers.git = {
 --- @type conflicting.Tracker
 M.trackers.manual = {
   attach = function(_) end,
-  detach = function(buf)
-    manual_tracker_bufs[buf] = nil
-  end,
+  detach = function(buf) end,
   is_enabled = function(buf)
     return manual_tracker_bufs[buf] ~= nil
   end,
