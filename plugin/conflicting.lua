@@ -20,6 +20,9 @@ local commands = {
   untrack = function()
     require("conflicting").untrack()
   end,
+  list = function()
+    require("conflicting").quickfix()
+  end,
 }
 
 vim.api.nvim_create_user_command("Conflicting", function(args)

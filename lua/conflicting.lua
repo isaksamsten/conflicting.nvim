@@ -3,6 +3,13 @@
 --- @field detach fun(buf: integer):nil
 --- @field is_enabled fun(buf: integer):nil
 
+--- @class conflicting.Cache
+--- @field markers table<integer, conflicting.MarkerHighlight>
+--- @field positions conflicting.Position[]
+--- @field trackers conflicting.Tracker[]
+--- @field needs_clear boolean?
+--- @field augroup integer?
+
 --- @alias conflicting.Position { ours_lnum: integer, delimiter_lnum: integer, theirs_lnum: integer}
 --- @alias conflicting.Marker
 --- | 0 our header
@@ -14,8 +21,10 @@
 ---
 local M = {}
 
-local OURS_PATTERN = "^<<<<<<< (%S+)"
-local THEIRS_PATTERN = "^>>>>>>> (%S+)"
+local OURS_PATTERN_VIM = "^<<<<<<<"
+local THEIRS_PATTERN_VIM = "^>>>>>>>"
+local OURS_PATTERN_LUA = "^<<<<<<< (%S+)"
+local THEIRS_PATTERN_LUA = "^>>>>>>> (%S+)"
 local DELIMITER_PATTERN = "^======="
 
 local OURS_HEADER = 0
@@ -50,7 +59,7 @@ local highlight_groups = {
 local buf_timer = vim.uv.new_timer()
 
 --- @alias conflicting.MarkerHighlight {hl_group: conflicting.Marker, incoming_header: string?, current_header: string?}
---- @type table<integer, {markers: table<integer, conflicting.MarkerHighlight >,  positions: conflicting.Position[], trackers: conflicting.Tracker[], needs_clear: boolean?, augroup: integer?}?>
+--- @type table<integer, conflicting.Cache?>
 local cache = {}
 
 --- @type table<integer, { fs_event : uv_fs_event_t?, timer: uv_timer_t?, is_conflict: boolean?}?>
@@ -140,17 +149,6 @@ local function find_conflict_markers(content, opts)
   return conflicts
 end
 
---- @param positions conflicting.Position[]
-local function find_conflict_under_cursor(positions)
-  local pos = vim.fn.getpos(".")[2]
-  for _, marker in pairs(positions) do
-    if pos <= marker.theirs_lnum and pos >= marker.ours_lnum then
-      return marker
-    end
-  end
-  return nil
-end
-
 --- Update buffer cache
 --- @param buf integer
 local function update_buf_cache(buf)
@@ -190,10 +188,17 @@ local update_buf = vim.schedule_wrap(function(buf)
   if is_enabled then
     local content = vim.api.nvim_buf_get_lines(buf, 0, -1, false)
     local markers = find_conflict_markers(content, {
-      ours_pattern = OURS_PATTERN,
-      theirs_pattern = THEIRS_PATTERN,
+      ours_pattern = OURS_PATTERN_LUA,
+      theirs_pattern = THEIRS_PATTERN_LUA,
       delimiter_pattern = DELIMITER_PATTERN,
     })
+
+    -- We disable diagnostics in the buffer if there are active conflict markers
+    if #markers > 0 then
+      vim.diagnostic.enable(false, { bufnr = buf })
+    else
+      vim.diagnostic.enable(true, { bufnr = buf })
+    end
 
     for _, marker in ipairs(markers) do
       local delimiter = marker.lnum + #marker.ours + 1
@@ -565,6 +570,60 @@ function M.untrack(buf)
   schedule_marker_updates(buf, 0)
 end
 
+--- @return integer? pos
+local function current_conflict_begin()
+  local begin = vim.fn.searchpos(OURS_PATTERN_VIM, "bcnW")[1]
+  local before_end = vim.fn.searchpos(THEIRS_PATTERN_VIM, "bnW")[1]
+
+  if begin == 0 or (before_end ~= 0 and before_end > begin) then
+    return nil
+  end
+
+  return begin
+end
+
+--- @return integer? pos
+local function current_conflict_end()
+  local after_begin = vim.fn.searchpos(OURS_PATTERN_VIM, "nW")[1]
+  local end_pos = vim.fn.searchpos(THEIRS_PATTERN_VIM, "cnW")[1]
+
+  if end_pos == 0 or (after_begin ~= 0 and end_pos > after_begin) then
+    return nil
+  end
+
+  return end_pos
+end
+
+--- @return integer? pos
+local function current_conflict_separator(before_begin, after_end)
+  -- when separator is before cursor
+  local before_sep = vim.fn.searchpos(DELIMITER_PATTERN, "bcnW")[1]
+  if before_sep and before_begin and before_begin < before_sep then
+    return before_sep
+  end
+
+  -- when separator is after cursor
+  local after_sep = vim.fn.searchpos(DELIMITER_PATTERN, "cnW")[1]
+  if after_sep and after_end and after_sep < after_end then
+    return after_sep
+  end
+
+  return nil
+end
+
+--- @return conflicting.Position?
+local function find_conflict_under_cursor()
+  local begin = current_conflict_begin()
+  local ending = current_conflict_end()
+  local middle = current_conflict_separator(begin, ending)
+
+  if begin and ending and middle then
+    return { ours_lnum = begin, delimiter_lnum = middle, theirs_lnum = ending }
+  else
+    return nil
+  end
+end
+
 --- Accept current changes
 --- @param buf integer?
 function M.accept_current(buf)
@@ -573,7 +632,7 @@ function M.accept_current(buf)
   if buf_cache == nil or #buf_cache.positions == 0 then
     return
   end
-  local pos = find_conflict_under_cursor(buf_cache.positions)
+  local pos = find_conflict_under_cursor()
   if pos then
     local current_change = vim.api.nvim_buf_get_lines(buf, pos.ours_lnum, pos.delimiter_lnum - 1, false)
     vim.api.nvim_buf_set_lines(buf, pos.ours_lnum - 1, pos.theirs_lnum, false, current_change)
@@ -589,11 +648,11 @@ function M.accept_incoming(buf)
   if buf_cache == nil or #buf_cache.positions == 0 then
     return
   end
-  local pos = find_conflict_under_cursor(buf_cache.positions)
+  local pos = find_conflict_under_cursor()
   if pos then
     local incoming_change = vim.api.nvim_buf_get_lines(buf, pos.delimiter_lnum, pos.theirs_lnum - 1, false)
     vim.api.nvim_buf_set_lines(buf, pos.ours_lnum - 1, pos.theirs_lnum, false, incoming_change)
-    schedule_marker_updates(buf)
+    schedule_marker_updates(buf, 200)
   end
 end
 
@@ -605,14 +664,14 @@ function M.accept_both(buf)
   if buf_cache == nil or #buf_cache.positions == 0 then
     return
   end
-  local pos = find_conflict_under_cursor(buf_cache.positions)
+  local pos = find_conflict_under_cursor()
   if pos then
     local current_change = vim.api.nvim_buf_get_lines(buf, pos.ours_lnum, pos.delimiter_lnum - 1, false)
     local incoming_change = vim.api.nvim_buf_get_lines(buf, pos.delimiter_lnum, pos.theirs_lnum - 1, false)
 
     local changes = vim.iter({ current_change, incoming_change }):flatten():totable()
     vim.api.nvim_buf_set_lines(buf, pos.ours_lnum - 1, pos.theirs_lnum, false, changes)
-    schedule_marker_updates(buf)
+    schedule_marker_updates(buf, 200)
   end
 end
 
@@ -624,10 +683,10 @@ function M.reject(buf)
   if buf_cache == nil or #buf_cache.positions == 0 then
     return
   end
-  local pos = find_conflict_under_cursor(buf_cache.positions)
+  local pos = find_conflict_under_cursor()
   if pos then
     vim.api.nvim_buf_set_lines(buf, pos.ours_lnum - 1, pos.theirs_lnum, false, {})
-    schedule_marker_updates(buf)
+    schedule_marker_updates(buf, 200)
   end
 end
 
@@ -641,7 +700,7 @@ function M.diff(buf, opts)
   if buf_cache == nil or #buf_cache.positions == 0 then
     return
   end
-  local pos = find_conflict_under_cursor(buf_cache.positions)
+  local pos = find_conflict_under_cursor()
   if pos then
     opts = opts or {}
     local win = vim.api.nvim_get_current_win()
@@ -664,7 +723,7 @@ function M.diff(buf, opts)
     vim.cmd("diffthis")
     vim.api.nvim_set_current_win(win)
     vim.cmd("diffthis")
-    schedule_marker_updates(buf)
+    schedule_marker_updates(buf, 200)
   end
 end
 
@@ -675,22 +734,15 @@ function M.next()
     return
   end
 
-  local current_lnum = vim.fn.getpos(".")[2]
-  local closest = nil
-  local min_positive_dist = nil
-  local dist
-  for _, marker in pairs(buf_cache.positions) do
-    dist = marker.delimiter_lnum - current_lnum
-    if
-      (dist > 0 and min_positive_dist == nil) or (min_positive_dist ~= nil and dist < min_positive_dist and dist > 0)
-    then
-      min_positive_dist = dist
-      closest = marker.delimiter_lnum
-    end
-  end
+  local current_line = vim.fn.getpos(".")[2]
+  local our_lnum = vim.fn.searchpos(OURS_PATTERN_VIM, "cW")[1]
+  local delimiter_lnum = vim.fn.searchpos(DELIMITER_PATTERN, "cW")[1]
+  local theirs_lnum = vim.fn.searchpos(THEIRS_PATTERN_VIM, "cW")[1]
 
-  if closest ~= nil then
-    vim.fn.cursor(closest, 0)
+  if our_lnum == 0 or delimiter_lnum == 0 or theirs_lnum == 0 then
+    vim.fn.setpos(".", { 0, current_line, 1, 0 })
+  else
+    vim.fn.cursor(delimiter_lnum, 0)
   end
 end
 
@@ -700,22 +752,47 @@ function M.previous()
   if buf_cache == nil or #buf_cache.positions == 0 then
     return
   end
+
   local current_lnum = vim.fn.getpos(".")[2]
-  local closest = nil
-  local max_negative_dist = nil
-  local dist
-  for _, marker in pairs(buf_cache.positions) do
-    dist = marker.delimiter_lnum - current_lnum
-    if
-      (dist < 0 and max_negative_dist == nil) or (max_negative_dist ~= nil and dist > max_negative_dist and dist < 0)
-    then
-      max_negative_dist = dist
-      closest = marker.delimiter_lnum
+  local theirs_lnum = vim.fn.searchpos(THEIRS_PATTERN_VIM, "bcW")[1]
+  local delimter_lnum = vim.fn.searchpos(DELIMITER_PATTERN, "bcW")[1]
+  local ours_lnum = vim.fn.searchpos(OURS_PATTERN_VIM, "bcW")[1]
+
+  if ours_lnum == 0 or delimter_lnum == 0 or theirs_lnum == 0 then
+    vim.fn.setpos(".", { 0, current_lnum, 1, 0 })
+  else
+    vim.fn.cursor(delimter_lnum, 0)
+  end
+end
+
+function M.quickfix()
+  local items = {}
+  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+    local buf_cache = cache[buf]
+    if buf_cache then
+      for _, marker in pairs(buf_cache.positions) do
+        local text
+        if marker.delimiter_lnum - marker.ours_lnum == 1 then
+          text = vim.fn.getbufoneline(buf, marker.delimiter_lnum + 1)
+        else
+          text = vim.fn.getbufoneline(buf, marker.ours_lnum + 1)
+        end
+
+        table.insert(items, {
+          bufnr = buf,
+          filename = vim.api.nvim_buf_get_name(buf),
+          lnum = marker.ours_lnum,
+          end_lnum = marker.theirs_lnum,
+          col = 0,
+          end_col = -1,
+          text = text,
+        })
+      end
     end
   end
-
-  if closest ~= nil then
-    vim.fn.cursor(closest, 0)
+  if #items > 0 then
+    vim.fn.setqflist(items, "r")
+    vim.cmd("copen")
   end
 end
 

@@ -87,6 +87,8 @@ Bind the following functions to suitable keys or use the command `Conflicting`:
 - `require("conflicting").reject()`: reject both changes. The same as `Conflicting reject`.
 - `require("conflicting").diff()`: open a two-way diff with the current and
   incoming changes to manually merge the changes. The same as `Conflicting diff`.
+- `require("conflicting").quickfix()`: add all conflict markers from tracked
+  files to the quickfix list.
 
 ## Highlight groups
 
