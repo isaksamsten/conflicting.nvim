@@ -652,7 +652,7 @@ function M.accept_incoming(buf)
   if pos then
     local incoming_change = vim.api.nvim_buf_get_lines(buf, pos.delimiter_lnum, pos.theirs_lnum - 1, false)
     vim.api.nvim_buf_set_lines(buf, pos.ours_lnum - 1, pos.theirs_lnum, false, incoming_change)
-    schedule_marker_updates(buf, 200)
+    schedule_marker_updates(buf, 0)
   end
 end
 
@@ -671,7 +671,7 @@ function M.accept_both(buf)
 
     local changes = vim.iter({ current_change, incoming_change }):flatten():totable()
     vim.api.nvim_buf_set_lines(buf, pos.ours_lnum - 1, pos.theirs_lnum, false, changes)
-    schedule_marker_updates(buf, 200)
+    schedule_marker_updates(buf, 0)
   end
 end
 
@@ -686,7 +686,7 @@ function M.reject(buf)
   local pos = find_conflict_under_cursor()
   if pos then
     vim.api.nvim_buf_set_lines(buf, pos.ours_lnum - 1, pos.theirs_lnum, false, {})
-    schedule_marker_updates(buf, 200)
+    schedule_marker_updates(buf, 0)
   end
 end
 
@@ -723,7 +723,7 @@ function M.diff(buf, opts)
     vim.cmd("diffthis")
     vim.api.nvim_set_current_win(win)
     vim.cmd("diffthis")
-    schedule_marker_updates(buf, 200)
+    schedule_marker_updates(buf, 0)
   end
 end
 
